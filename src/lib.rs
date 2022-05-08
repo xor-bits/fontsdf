@@ -5,10 +5,7 @@ use fontdue::FontSettings;
 use geom::Geometry;
 use glam::Vec2;
 use ordered_float::OrderedFloat;
-use std::{
-    collections::HashMap,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 use ttf_parser::{Face, Rect};
 
 //
@@ -24,29 +21,48 @@ mod math;
 
 #[derive(Debug, Clone)]
 pub struct Font {
-    glyphs: HashMap<char, (Geometry, Rect)>,
+    glyphs: Vec<(Geometry, Rect)>,
     oo_units_per_em: f32,
 
     inner: fontdue::Font,
 }
 
+struct InternalMetrics {
+    sf: f32,
+    radius: usize,
+    offset_x: f32,
+    offset_y: f32,
+    width: usize,
+    height: usize,
+}
+
+//
+
 impl Font {
-    pub fn form_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
         let inner = fontdue::Font::from_bytes(bytes, FontSettings::default())?;
         let face = Face::from_slice(bytes, 0).unwrap();
 
         let oo_units_per_em = 1.0 / face.units_per_em() as f32;
 
-        let glyphs = inner
-            .chars()
-            .keys()
-            .filter_map(|&c| {
-                let glyph_id = face.glyph_index(c)?;
+        let initial = (
+            Geometry::new(),
+            Rect {
+                x_min: 0,
+                y_min: 0,
+                x_max: 0,
+                y_max: 0,
+            },
+        );
+        let mut glyphs = vec![initial; face.number_of_glyphs() as usize];
+        for (&c, &i) in inner.chars().iter() {
+            (|| {
                 let mut geom = Geometry::new();
-                let bb = face.outline_glyph(glyph_id, &mut geom)?;
-                Some((c, (geom, bb)))
-            })
-            .collect();
+                let bb = face.outline_glyph(face.glyph_index(c)?, &mut geom)?;
+                glyphs[i.get() as usize] = (geom, bb);
+                Some(())
+            })();
+        }
 
         Ok(Self {
             glyphs,
@@ -56,24 +72,42 @@ impl Font {
         })
     }
 
-    pub fn rasterize_sdf(&self, code_point: char, px: f32) -> (Metrics, Vec<u8>) {
-        let scale_factor = px * self.oo_units_per_em;
-        let (geom, bb) = self.glyphs.get(&code_point).unwrap();
+    pub fn scale_factor(&self, px: f32) -> f32 {
+        px * self.oo_units_per_em
+    }
 
-        let radius = (128.0 * scale_factor).ceil() as usize;
-        let offset_x = bb.x_min as f32 * scale_factor;
-        let offset_y = bb.y_min as f32 * scale_factor;
-        let width = (bb.x_max as f32 * scale_factor - offset_x) as usize + radius * 2;
-        let height = (bb.y_max as f32 * scale_factor - offset_y) as usize + radius * 2;
+    pub fn radius(&self, px: f32) -> usize {
+        let scale_factor = self.scale_factor(px);
+        (128.0 * scale_factor).ceil() as _
+    }
 
-        let image = (0..height)
+    pub fn metrics_sdf(&self, character: char, px: f32) -> Metrics {
+        self.metrics_indexed_sdf(self.lookup_glyph_index(character), px)
+    }
+
+    pub fn metrics_indexed_sdf(&self, index: u16, px: f32) -> Metrics {
+        let (_, bb) = self.glyphs.get(index as usize).unwrap();
+        let metrics = self.internal_metrics(px, bb);
+        self.modify_metrics(index, px, metrics.radius, metrics.width, metrics.height)
+    }
+
+    pub fn rasterize_sdf(&self, character: char, px: f32) -> (Metrics, Vec<u8>) {
+        self.rasterize_indexed_sdf(self.lookup_glyph_index(character), px)
+    }
+
+    pub fn rasterize_indexed_sdf(&self, index: u16, px: f32) -> (Metrics, Vec<u8>) {
+        let (geom, bb) = self.glyphs.get(index as usize).unwrap();
+
+        let metrics = self.internal_metrics(px, bb);
+
+        let image = (0..metrics.height)
             .rev()
-            .flat_map(|y| (0..width).map(move |x| (x, y)))
+            .flat_map(|y| (0..metrics.width).map(move |x| (x, y)))
             .map(|(x, y)| {
                 Vec2::new(
-                    x as f32 - radius as f32 + offset_x,
-                    y as f32 - radius as f32 + offset_y,
-                ) / scale_factor
+                    x as f32 - metrics.radius as f32 + metrics.offset_x,
+                    y as f32 - metrics.radius as f32 + metrics.offset_y,
+                ) / metrics.sf
             })
             .map(|p| {
                 let is_inside = geom.is_inside(p);
@@ -93,14 +127,41 @@ impl Font {
             })
             .collect();
 
-        let mut metrics = self.inner.metrics(code_point, px);
+        (
+            self.modify_metrics(index, px, metrics.radius, metrics.width, metrics.height),
+            image,
+        )
+    }
 
+    fn internal_metrics(&self, px: f32, bb: &Rect) -> InternalMetrics {
+        let sf = self.scale_factor(px);
+        let radius = self.radius(px);
+        let offset_x = bb.x_min as f32 * sf;
+        let offset_y = bb.y_min as f32 * sf;
+        InternalMetrics {
+            sf,
+            radius,
+            offset_x,
+            offset_y,
+            width: (bb.x_max as f32 * sf - offset_x) as usize + radius * 2,
+            height: (bb.y_max as f32 * sf - offset_y) as usize + radius * 2,
+        }
+    }
+
+    fn modify_metrics(
+        &self,
+        index: u16,
+        px: f32,
+        radius: usize,
+        width: usize,
+        height: usize,
+    ) -> Metrics {
+        let mut metrics = self.inner.metrics_indexed(index, px);
         metrics.xmin -= radius as i32;
         metrics.ymin -= radius as i32;
         metrics.width = width;
         metrics.height = height;
-
-        (metrics, image)
+        metrics
     }
 }
 
