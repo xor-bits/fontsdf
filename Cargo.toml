@@ -2,6 +2,8 @@
 name = "fontsdf"
 version = "0.1.0"
 edition = "2021"
+description = "fontdue extension to generate sdf:s directly"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -9,7 +11,7 @@ edition = "2021"
 ttf-parser = "0.15"
 ordered-float = "3.0"
 glam = "0.20"
-fontdue = "0.7.2"
+fontdue = "0.7"
 
 [dev-dependencies]
-image = "0.24.2"
+image = "0.24"
