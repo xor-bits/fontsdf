@@ -81,6 +81,15 @@ impl Font {
         (128.0 * scale_factor).ceil() as _
     }
 
+    #[inline(always)]
+    pub fn metrics(&self, character: char, px: f32, sdf: bool) -> Metrics {
+        if sdf {
+            self.metrics_sdf(character, px)
+        } else {
+            self.inner.metrics(character, px)
+        }
+    }
+
     pub fn metrics_sdf(&self, character: char, px: f32) -> Metrics {
         self.metrics_indexed_sdf(self.lookup_glyph_index(character), px)
     }
@@ -131,6 +140,33 @@ impl Font {
             self.modify_metrics(index, px, metrics.radius, metrics.width, metrics.height),
             image,
         )
+    }
+
+    #[inline(always)]
+    pub fn metrics_indexed(&self, index: u16, px: f32, sdf: bool) -> Metrics {
+        if sdf {
+            self.metrics_indexed_sdf(index, px)
+        } else {
+            self.inner.metrics_indexed(index, px)
+        }
+    }
+
+    #[inline(always)]
+    pub fn rasterize(&self, character: char, px: f32, sdf: bool) -> (Metrics, Vec<u8>) {
+        if sdf {
+            self.rasterize_sdf(character, px)
+        } else {
+            self.inner.rasterize(character, px)
+        }
+    }
+
+    #[inline(always)]
+    pub fn rasterize_indexed(&self, index: u16, px: f32, sdf: bool) -> (Metrics, Vec<u8>) {
+        if sdf {
+            self.rasterize_indexed_sdf(index, px)
+        } else {
+            self.inner.rasterize_indexed(index, px)
+        }
     }
 
     fn internal_metrics(&self, px: f32, bb: &Rect) -> InternalMetrics {

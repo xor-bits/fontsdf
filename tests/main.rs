@@ -11,13 +11,13 @@ const FONT_FILE: &[u8] = include_bytes!("../res/roboto/font.ttf");
 fn main_test() {
     let font = Font::from_bytes(FONT_FILE).unwrap();
 
-    let (metrics, simple) = font.rasterize('b', 512.0);
+    let (metrics, simple) = font.rasterize('b', 512.0, false);
     GrayImage::from_raw(metrics.width as _, metrics.height as _, simple)
         .unwrap()
         .save("test1.png")
         .unwrap();
 
-    let (metrics, sdf) = font.rasterize_sdf('b', 512.0);
+    let (metrics, sdf) = font.rasterize('b', 512.0, true);
     GrayImage::from_raw(metrics.width as _, metrics.height as _, sdf)
         .unwrap()
         .save("test2.png")
