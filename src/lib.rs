@@ -14,8 +14,8 @@ pub use fontdue::{Metrics, OutlineBounds};
 
 //
 
-mod geom;
-mod math;
+pub mod geom;
+pub mod math;
 
 //
 
@@ -78,7 +78,7 @@ impl Font {
 
     pub fn radius(&self, px: f32) -> usize {
         let scale_factor = self.scale_factor(px);
-        (128.0 * scale_factor).ceil() as _
+        (255.0 * scale_factor).ceil() as _
     }
 
     #[inline(always)]
@@ -122,7 +122,7 @@ impl Font {
                 let is_inside = geom.is_inside(p);
                 let mut x = geom
                     .iter_lines()
-                    .map(move |s| s.distance(p))
+                    .map(move |s| s.distance(p) * 0.5)
                     .map(OrderedFloat)
                     .min()
                     .unwrap_or(OrderedFloat(0.0))
