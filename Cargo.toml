@@ -1,6 +1,6 @@
 [package]
 name = "fontsdf"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "fontdue extension to generate sdf:s directly"
 license = "MIT"
