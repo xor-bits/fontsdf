@@ -36,15 +36,15 @@ image::GrayImage::from_raw(metrics.width as _, metrics.height as _, sdf)
 #### Normal
 
 <div style="display: flex; align-items: center;">
-	<img src=".github/hash_norm.png"/>
-	<img src=".github/a_norm.png"/>
+	<img src="/.github/hash_norm.png"/>
+	<img src="/.github/a_norm.png"/>
 </div>
 
 #### SDF
 
 <div style="display: flex; align-items: center;">
-	<img src=".github/hash_sdf.png"/>
-	<img src=".github/a_sdf.png"/>
+	<img src="/.github/hash_sdf.png"/>
+	<img src="/.github/a_sdf.png"/>
 </div>
 
 ### TODO:
