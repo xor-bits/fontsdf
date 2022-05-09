@@ -81,15 +81,6 @@ impl Font {
         (255.0 * scale_factor).ceil() as _
     }
 
-    #[inline(always)]
-    pub fn metrics(&self, character: char, px: f32, sdf: bool) -> Metrics {
-        if sdf {
-            self.metrics_sdf(character, px)
-        } else {
-            self.inner.metrics(character, px)
-        }
-    }
-
     pub fn metrics_sdf(&self, character: char, px: f32) -> Metrics {
         self.metrics_indexed_sdf(self.lookup_glyph_index(character), px)
     }
@@ -105,7 +96,7 @@ impl Font {
     }
 
     pub fn rasterize_indexed_sdf(&self, index: u16, px: f32) -> (Metrics, Vec<u8>) {
-        let (geom, bb) = self.glyphs.get(index as usize).unwrap();
+        let (geom, bb) = self.geometry_indexed(index);
 
         let metrics = self.internal_metrics(px, bb);
 
@@ -140,6 +131,23 @@ impl Font {
             self.modify_metrics(index, px, metrics.radius, metrics.width, metrics.height),
             image,
         )
+    }
+
+    pub fn geometry(&self, character: char) -> &'_ (Geometry, Rect) {
+        self.geometry_indexed(self.lookup_glyph_index(character))
+    }
+
+    pub fn geometry_indexed(&self, index: u16) -> &'_ (Geometry, Rect) {
+        self.glyphs.get(index as usize).unwrap()
+    }
+
+    #[inline(always)]
+    pub fn metrics(&self, character: char, px: f32, sdf: bool) -> Metrics {
+        if sdf {
+            self.metrics_sdf(character, px)
+        } else {
+            self.inner.metrics(character, px)
+        }
     }
 
     #[inline(always)]

@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "fontsdf"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "fontdue",
  "glam",
