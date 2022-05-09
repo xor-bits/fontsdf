@@ -15,8 +15,8 @@ using less video memory (for the texture).
 
 [1] For example:
 
-- It is possible to use single 64px glyph to render both 14px
-  and 200px text.
+- It is possible to use single a 64px glyph to render both 14px
+  and 200px glyphs.
 - It is easy to add glow, outlines and such.
 
 ### Example usage with `image`:
