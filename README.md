@@ -56,7 +56,7 @@ image::GrayImage::from_raw(metrics.width as _, metrics.height as _, sdf)
 	<img src="/.github/norm_text.png"/>
 </div>
 
-#### SDF
+#### SDF + 'free' shadow
 
 <div style="display: flex; align-items: center;">
 	<img src="/.github/sdf_glyphs.png"/>
