@@ -47,6 +47,22 @@ image::GrayImage::from_raw(metrics.width as _, metrics.height as _, sdf)
 	<img src="/.github/a_sdf.png"/>
 </div>
 
+### Example results:
+
+#### Normal
+
+<div style="display: flex; align-items: center;">
+	<img src="/.github/norm_glyphs.png"/>
+	<img src="/.github/norm_text.png"/>
+</div>
+
+#### SDF
+
+<div style="display: flex; align-items: center;">
+	<img src="/.github/sdf_glyphs.png"/>
+	<img src="/.github/sdf_text.png"/>
+</div>
+
 ### TODO:
 
 - dual distance field (https://steamcdn-a.akamaihd.net/apps/valve/2007/SIGGRAPH2007_AlphaTestedMagnification.pdf)
