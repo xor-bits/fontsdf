@@ -26,9 +26,65 @@ pub struct Line {
     pub to: Vec2,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct BoundingBox {
+    pub min: Vec2,
+    pub max: Vec2,
+}
+
 //
 
+impl BoundingBox {
+    pub fn aabb(self, other: Self) -> bool {
+        (self.min.x < other.max.x && self.max.x >= other.min.x)
+            && (self.min.y < other.max.y && self.max.y >= other.min.y)
+    }
+
+    /// returns the squared distance from the furthest point to this point
+    ///
+    /// shamelessly stolen (and modified) from: https://stackoverflow.com/a/18157551
+    pub fn max_distance_squared(self, point: Vec2) -> f32 {
+        ((self.min - point).max(Vec2::ZERO).max(point - self.max) /* + (self.min - self.max).abs() */)
+            .length_squared()
+    }
+}
+
 impl Shape {
+    pub fn collision(self, other: Shape) -> bool {
+        if !self.bounding_box().aabb(other.bounding_box()) {
+            return false;
+        }
+
+        // note: lines have only one line obviously
+        // so collision detection from line to
+        // shape is pretty fast
+        self.iter_lines()
+            .flat_map(|a| other.iter_lines().map(move |b| (a, b)))
+            .any(|(a, b)| a.line_line_intersection(b))
+    }
+
+    pub fn bounding_box(self) -> BoundingBox {
+        match self {
+            Shape::Line(Line { from, to }) => BoundingBox {
+                min: from.min(to),
+                max: from.max(to),
+            },
+            Shape::Quad { from, by, to } => BoundingBox {
+                min: from.min(by).min(to),
+                max: from.max(by).max(to),
+            },
+            Shape::Curve {
+                from,
+                by_a,
+                by_b,
+                to,
+            } => BoundingBox {
+                min: from.min(by_a).min(by_b).min(to),
+                max: from.max(by_a).max(by_b).max(to),
+            },
+        }
+    }
+
     pub fn iter_lines(self) -> impl Iterator<Item = Line> {
         enum ShapeIter<I0, I1, I2>
         where
@@ -113,7 +169,7 @@ impl Shape {
 }
 
 impl Line {
-    pub fn distance(&self, p: Vec2) -> f32 {
+    pub fn distance_ord(&self, p: Vec2) -> f32 {
         let a = self.from;
         let b = self.to;
         let a_to_p = p - a;
@@ -123,7 +179,32 @@ impl Line {
             .min(1.0)
             .max(0.0);
 
-        ((a + a_to_b * t) - p).length()
+        ((a + a_to_b * t) - p).length_squared()
+    }
+
+    pub fn distance_finalize(d: f32) -> f32 {
+        d.sqrt()
+    }
+
+    /// shamelessly stolen from: https://gamedev.stackexchange.com/a/26022
+    fn line_line_intersection(self, other: Self) -> bool {
+        let point_a1 = self.from;
+        let point_a2 = self.to;
+        let point_b1 = other.from;
+        let point_b2 = other.to;
+
+        let a1_a2 = point_a2 - point_a1;
+        let b1_b2 = point_b2 - point_b1;
+        let b1_a1 = point_a1 - point_b1;
+
+        let denominator = a1_a2.x * b1_b2.y - a1_a2.y * b1_b2.x;
+        let numerator1 = b1_a1.y * b1_b2.x - b1_a1.x * b1_b2.y;
+        let numerator2 = b1_a1.y * a1_a2.x - b1_a1.x * a1_a2.y;
+
+        let r = numerator1 / denominator;
+        let s = numerator2 / denominator;
+
+        (0.0..=1.0).contains(&r) && (0.0..=1.0).contains(&s)
     }
 }
 

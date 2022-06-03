@@ -4,6 +4,7 @@
 use fontdue::FontSettings;
 use geom::Geometry;
 use glam::Vec2;
+use math::Line;
 use ordered_float::OrderedFloat;
 use std::ops::{Deref, DerefMut};
 use ttf_parser::{Face, Rect};
@@ -78,7 +79,7 @@ impl Font {
 
     pub fn radius(&self, px: f32) -> usize {
         let scale_factor = self.scale_factor(px);
-        (255.0 * scale_factor).ceil() as _
+        (255.0 * scale_factor).ceil() as usize + 1
     }
 
     pub fn metrics_sdf(&self, character: char, px: f32) -> Metrics {
@@ -102,7 +103,7 @@ impl Font {
 
         let image = (0..metrics.height)
             .rev()
-            .flat_map(|y| (0..metrics.width).map(move |x| (x, y)))
+            .flat_map(|y| (0..metrics.width).map(move |x| (x + 1, y + 1)))
             .map(|(x, y)| {
                 Vec2::new(
                     x as f32 - metrics.radius as f32 + metrics.offset_x,
@@ -111,13 +112,29 @@ impl Font {
             })
             .map(|p| {
                 let is_inside = geom.is_inside(p);
-                let mut x = geom
+
+                /* let shape_with_closest_point = geom
+                    .iter_shapes()
+                    .min_by_key(|s| OrderedFloat(s.bounding_box().max_distance_squared(p)))
+                    .unwrap(); // TODO:
+
+                let distance_squared = shape_with_closest_point
                     .iter_lines()
-                    .map(move |s| s.distance(p) * 0.5)
+                    .map(|s| s.distance_ord(p))
+                    .map(OrderedFloat)
+                    .min()
+                    .unwrap_or(OrderedFloat(0.0))
+                    .0; */
+
+                let distance_squared = geom
+                    .iter_lines()
+                    .map(|s| s.distance_ord(p))
                     .map(OrderedFloat)
                     .min()
                     .unwrap_or(OrderedFloat(0.0))
                     .0;
+
+                let mut x = Line::distance_finalize(distance_squared) * 0.5;
 
                 if !is_inside {
                     x *= -1.0;
@@ -182,13 +199,28 @@ impl Font {
         let radius = self.radius(px);
         let offset_x = bb.x_min as f32 * sf;
         let offset_y = bb.y_min as f32 * sf;
+
+        let width = bb.x_max.abs_diff(bb.x_min);
+        let height = bb.y_max.abs_diff(bb.y_min);
+
+        let width = if width == 0 {
+            0
+        } else {
+            (width as f32 * sf) as usize + radius * 2
+        };
+        let height = if height == 0 {
+            0
+        } else {
+            (height as f32 * sf) as usize + radius * 2
+        };
+
         InternalMetrics {
             sf,
             radius,
             offset_x,
             offset_y,
-            width: (bb.x_max as f32 * sf - offset_x) as usize + radius * 2,
-            height: (bb.y_max as f32 * sf - offset_y) as usize + radius * 2,
+            width,
+            height,
         }
     }
 
