@@ -51,12 +51,19 @@ image::GrayImage::from_raw(metrics.width as _, metrics.height as _, sdf)
 
 #### Normal
 
+- 128x156
+- 80px font size
+
 <div style="display: flex; align-items: center;">
 	<img src="/.github/norm_glyphs.png"/>
 	<img src="/.github/norm_text.png"/>
 </div>
 
 #### SDF
+
+- 128x128
+- 48px (+radius) font size (32px input size should be enough for any output size)
+- 'free' shadow
 
 <div style="display: flex; align-items: center;">
 	<img src="/.github/sdf_glyphs.png"/>
