@@ -1,4 +1,4 @@
-#![feature(bench_black_box)]
+/* #![feature(bench_black_box)]
 
 use fontsdf::Font;
 use std::{
@@ -35,3 +35,6 @@ fn main() {
 
     println!("{:?} per raster", elapsed / (THREADS * OPS));
 }
+ */
+
+fn main() {}

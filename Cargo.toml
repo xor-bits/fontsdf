@@ -1,6 +1,6 @@
 [package]
 name = "fontsdf"
-version = "0.4.5"
+version = "0.4.6"
 edition = "2021"
 description = "fontdue extension to generate sdf:s directly"
 license = "MIT"
@@ -15,7 +15,7 @@ debug = true
 [dependencies]
 ttf-parser = "0.15"
 ordered-float = "3.0"
-glam = "0.20"
+glam = "0.21"
 fontdue = "0.7"
 
 [dev-dependencies]
