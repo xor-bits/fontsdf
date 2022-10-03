@@ -75,3 +75,4 @@ image::GrayImage::from_raw(metrics.width as _, metrics.height as _, sdf)
 ### TODO:
 
 - dual distance field (https://steamcdn-a.akamaihd.net/apps/valve/2007/SIGGRAPH2007_AlphaTestedMagnification.pdf)
+- simd acceleration
