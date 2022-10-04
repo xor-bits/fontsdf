@@ -1,4 +1,4 @@
-use fontsdf::Font;
+/*use fontsdf::Font;
 use std::{hint::black_box, time::Instant};
 
 const FONT_FILE: &[u8] = include_bytes!("../res/roboto/font.ttf");
@@ -12,5 +12,5 @@ fn main() {
         font.rasterize_indexed(black_box(index), black_box(100.0), true);
     }
     println!("{:?}", now.elapsed());
-}
-// fn main() {}
+}*/
+fn main() {}
