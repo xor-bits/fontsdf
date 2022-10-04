@@ -4,12 +4,18 @@ use glam::{BVec4A, UVec4, Vec2, Vec4};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Shape {
-    Line(Line),
+    Line {
+        line: Line,
+
+        bb: BoundingBox,
+    },
 
     Quad {
         from: Vec2,
         by: Vec2,
         to: Vec2,
+
+        bb: BoundingBox,
     },
 
     Curve {
@@ -17,6 +23,8 @@ pub enum Shape {
         by_a: Vec2,
         by_b: Vec2,
         to: Vec2,
+
+        bb: BoundingBox,
     },
 }
 
@@ -86,30 +94,11 @@ impl Ray {
 }
 
 impl Shape {
-    // TODO:
-    // cache these
-    //
-    // this function takes too much time
-    // according to flamegraph
     pub fn bounding_box(self) -> BoundingBox {
         match self {
-            Shape::Line(Line { from, to }) => BoundingBox {
-                min: from.min(to),
-                max: from.max(to),
-            },
-            Shape::Quad { from, by, to } => BoundingBox {
-                min: from.min(by).min(to),
-                max: from.max(by).max(to),
-            },
-            Shape::Curve {
-                from,
-                by_a,
-                by_b,
-                to,
-            } => BoundingBox {
-                min: from.min(by_a).min(by_b).min(to),
-                max: from.max(by_a).max(by_b).max(to),
-            },
+            Shape::Line { bb, .. } => bb,
+            Shape::Quad { bb, .. } => bb,
+            Shape::Curve { bb, .. } => bb,
         }
     }
 
@@ -147,10 +136,10 @@ impl Shape {
 
         match self {
             // just a line
-            Shape::Line(line) => ShapeIter::I0(Some(line).into_iter()),
+            Shape::Line { line, .. } => ShapeIter::I0(Some(line).into_iter()),
 
             // bézier curve with 1 control point
-            Shape::Quad { from, by, to } => {
+            Shape::Quad { from, by, to, .. } => {
                 let mut prev = from;
 
                 ShapeIter::I1((1..=RES).map(|i| i as f32 * STEP).map(move |t| {
@@ -172,6 +161,7 @@ impl Shape {
                 by_a,
                 by_b,
                 to,
+                ..
             } => {
                 let mut prev = from;
 
@@ -248,8 +238,14 @@ impl Line {
 }
 
 impl From<Line> for Shape {
-    fn from(val: Line) -> Self {
-        Self::Line(val)
+    fn from(line: Line) -> Self {
+        Self::Line {
+            line,
+            bb: BoundingBox {
+                min: line.from.min(line.to),
+                max: line.from.max(line.to),
+            },
+        }
     }
 }
 

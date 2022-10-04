@@ -1,4 +1,4 @@
-use crate::math::{bvec4_to_uvec4, Line, Ray, Shape};
+use crate::math::{bvec4_to_uvec4, BoundingBox, Line, Ray, Shape};
 use glam::{BVec4A, UVec4, Vec2, Vec4};
 use ttf_parser::OutlineBuilder;
 
@@ -109,6 +109,10 @@ impl OutlineBuilder for Geometry {
             from: self.current,
             by,
             to,
+            bb: BoundingBox {
+                min: self.current.min(by).min(to),
+                max: self.current.max(by).max(to),
+            },
         });
         self.current = to;
         self.min_x = self.min_x.min(by.x).min(to.x);
@@ -123,6 +127,10 @@ impl OutlineBuilder for Geometry {
             by_a,
             by_b,
             to,
+            bb: BoundingBox {
+                min: self.current.min(by_a).min(by_b).min(to),
+                max: self.current.max(by_a).max(by_b).max(to),
+            },
         });
         self.current = to;
         self.min_x = self.min_x.min(by_a.x).min(by_b.x).min(to.x);
