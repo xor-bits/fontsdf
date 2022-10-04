@@ -25,16 +25,15 @@ using less video memory (for the texture).
 
 #### NOTE: Use fontdue for simple glyphs instead. It is a lot faster.
 
-| Task                       | SDF     | regular  |
-|---------------------------:|:-------:|:--------:|
-| High resolution glyphs     | &check; | &check;  |
-| Medium resolution glyphs   | &check; | &check;  |
-| Low resolution glyphs      |         | &check;  |
-| Flexible resolution glyphs | &check; |          |
-| Distorted text             | &check; |          |
-| Shadows borders and effects| &check; |          |
-| GUI:s                      |         | &check;  |
-| 3D game worlds             | &check; |          |
+| Task                         | SDF     | regular  |
+|-----------------------------:|:-------:|:--------:|
+| High resolution glyphs       | &check; | &check;  |
+| Medium resolution glyphs     | &check; | &check;  |
+| Low resolution glyphs        |         | &check;  |
+| Stretched or squished glyphs | &check; |          |
+| Shadows borders and effects  | &check; |          |
+| GUI:s                        |         | &check;  |
+| 3D game worlds               | &check; |          |
 
 * :white_check_mark: means it is good at
 
