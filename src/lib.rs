@@ -4,7 +4,7 @@
 use fontdue::FontSettings;
 use geom::Geometry;
 use glam::{UVec4, Vec4};
-use math::{bvec4_to_uvec4, Line};
+use math::{bvec4_to_uvec4, IterVec4MinMax, Line};
 use std::ops::{Deref, DerefMut};
 use ttf_parser::{Face, Rect};
 
@@ -41,7 +41,7 @@ struct InternalMetrics {
 impl Font {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
         let inner = fontdue::Font::from_bytes(bytes, FontSettings::default())?;
-        let face = Face::from_slice(bytes, 0).unwrap();
+        let face = Face::parse(bytes, 0).unwrap();
 
         let oo_units_per_em = 1.0 / face.units_per_em() as f32;
 
@@ -128,24 +128,46 @@ impl Font {
                 ),
             )
         }) {
+            // normal rendering (non SDF) cares mostly
+            // about this one only
+            //
+            // but with SDF:s, the distances are also
+            // needed
             let is_inside = geom.is_inside(p);
 
-            // TODO:
+            /* this one was NOT faster:
             // filter out bounding boxes where their
             // nearest point is further than
             // any other bounding box's furthest point
-            //
+
             // so find bounding box with the nearest far
             // point on it
-            //
-            // take that point
-            //
-            // then filter out bounding boxes that are
-            // further away than this point
+            let nearest_far_point = geom
+                .iter_shapes()
+                .map(|s| s.bounding_box().max_distance_squared(p))
+                .min_vec_or(Vec4::ZERO);
 
-            let mut distances_squared = geom.iter_lines().map(|s| s.distance_ord(p));
-            let first = distances_squared.next().unwrap_or(Vec4::splat(0.0));
-            let distance_squared = distances_squared.fold(first, |min, next| min.min(next));
+            // take that point
+
+            let distance_squared = geom
+                .iter_shapes()
+                // then filter out bounding boxes that are
+                // further away than this point
+                .filter(|s| {
+                    s.bounding_box()
+                        .min_distance_squared(p)
+                        .cmplt(nearest_far_point)
+                        .any()
+                })
+                // now find the closest real point
+                .flat_map(|s| s.iter_lines())
+                .map(|s| s.distance_ord(p))
+                .min_vec_or(Vec4::splat(0.0)); */
+
+            let distance_squared = geom
+                .iter_lines()
+                .map(|s| s.distance_ord(p))
+                .min_vec_or(Vec4::splat(0.0));
 
             // invert pixels that are 'inside' the geometry
             let mut d = Line::distance_finalize(distance_squared) * 0.5;

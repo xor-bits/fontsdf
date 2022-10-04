@@ -56,12 +56,49 @@ impl BoundingBox {
         self.min.cmplt(other.max).all() && self.max.cmpge(other.min).all()
     }
 
-    /// returns the squared distance from the furthest point to this point
+    /// squared distance from a point to the
+    /// furthest point on this bounding box
+    pub fn max_distance_squared(self, points: (Vec4, Vec4)) -> Vec4 {
+        let mid = (self.min + self.max) * 0.5;
+        let point_side = (points.0 - Vec4::splat(mid.x), points.1 - Vec4::splat(mid.y));
+
+        let point_side_x_is_negative =
+            bvec4_to_uvec4(point_side.0.cmple(Vec4::splat(0.0))).as_vec4();
+        let point_side_y_is_negative =
+            bvec4_to_uvec4(point_side.1.cmple(Vec4::splat(0.0))).as_vec4();
+
+        // i had to make it manually branchless
+        // because simd makes it harder not to
+        let x = points.0
+            - point_side_x_is_negative * Vec4::splat(self.max.x)
+            - (Vec4::splat(1.0) - point_side_x_is_negative) * Vec4::splat(self.min.x);
+        // ==
+        /* let x = point.x
+        - if point_side.x <= 0.0 {
+            self.max.x
+        } else {
+            self.min.x
+        }; */
+        let y = points.1
+            - point_side_y_is_negative * Vec4::splat(self.max.y)
+            - (Vec4::splat(1.0) - point_side_y_is_negative) * Vec4::splat(self.min.y);
+
+        x * x + y * y
+    }
+
+    /// squared distance from a point to the
+    /// furthest point on this bounding box
     ///
     /// shamelessly stolen (and modified) from: https://stackoverflow.com/a/18157551
-    pub fn max_distance_squared(self, point: Vec2) -> f32 {
-        ((self.min - point).max(Vec2::ZERO).max(point - self.max) /* + (self.min - self.max).abs() */)
-            .length_squared()
+    pub fn min_distance_squared(self, points: (Vec4, Vec4)) -> Vec4 {
+        let x = (Vec4::splat(self.min.x) - points.0)
+            .max(Vec4::splat(0.0))
+            .max(points.0 - Vec4::splat(self.max.x));
+        let y = (Vec4::splat(self.min.y) - points.1)
+            .max(Vec4::splat(0.0))
+            .max(points.1 - Vec4::splat(self.max.y));
+
+        x * x + y * y
     }
 }
 
@@ -203,7 +240,8 @@ impl Line {
         .min(Vec4::splat(1.0))
         .max(Vec4::splat(0.0));
 
-        ((a.0 + a_to_b.0 * t) - p.0).powf(2.0) + ((a.1 + a_to_b.1 * t) - p.1).powf(2.0)
+        let tmp = ((a.0 + a_to_b.0 * t) - p.0, (a.1 + a_to_b.1 * t) - p.1);
+        tmp.0 * tmp.0 + tmp.1 * tmp.1
     }
 
     pub fn distance_finalize(d: Vec4) -> Vec4 {
@@ -259,4 +297,46 @@ pub fn bvec4_to_uvec4(v: BVec4A) -> UVec4 {
         (v & 0b100) >> 2,
         (v & 0b1000) >> 3,
     )
+}
+
+//
+
+pub trait IterVec4MinMax {
+    /// per component min
+    fn min_vec(self) -> Option<Vec4>;
+
+    // these _or ones DID make a difference
+    // they drop out one branch
+    /// per component min
+    fn min_vec_or(self, or: Vec4) -> Vec4;
+
+    /// per component max
+    fn max_vec(self) -> Option<Vec4>;
+
+    /// per component max
+    fn max_vec_or(self, or: Vec4) -> Vec4;
+}
+
+//
+
+impl<T: Iterator<Item = Vec4>> IterVec4MinMax for T {
+    fn min_vec(mut self) -> Option<Vec4> {
+        let first = self.next()?;
+        Some(self.fold(first, |min, v| min.min(v)))
+    }
+
+    fn min_vec_or(mut self, or: Vec4) -> Vec4 {
+        let first = self.next().unwrap_or(or);
+        self.fold(first, |min, v| min.min(v))
+    }
+
+    fn max_vec(mut self) -> Option<Vec4> {
+        let first = self.next()?;
+        Some(self.fold(first, |max, v| max.max(v)))
+    }
+
+    fn max_vec_or(mut self, or: Vec4) -> Vec4 {
+        let first = self.next().unwrap_or(or);
+        self.fold(first, |max, v| max.max(v))
+    }
 }
