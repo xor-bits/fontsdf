@@ -1,11 +1,19 @@
 // This SDF rasterizer is not the most optimal,
 // but this is simple and gets the job done
 
+#![no_std]
+
+//
+
+extern crate alloc;
+
+//
+
+use alloc::vec::Vec;
 use fontdue::FontSettings;
 use geom::Geometry;
 use glam::{UVec4, Vec4};
 use math::{bvec4_to_uvec4, IterVec4MinMax, Line};
-use std::ops::{Deref, DerefMut};
 use ttf_parser::{Face, Rect};
 
 //
@@ -39,6 +47,14 @@ struct InternalMetrics {
 //
 
 impl Font {
+    pub fn inner(&self) -> &fontdue::Font {
+        &self.inner
+    }
+
+    pub fn inner_mut(&mut self) -> &mut fontdue::Font {
+        &mut self.inner
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
         let inner = fontdue::Font::from_bytes(bytes, FontSettings::default())?;
         let face = Face::parse(bytes, 0).unwrap();
@@ -54,7 +70,8 @@ impl Font {
                 y_max: 0,
             },
         );
-        let mut glyphs = vec![initial; face.number_of_glyphs() as usize];
+        let mut glyphs = Vec::new();
+        glyphs.resize(face.number_of_glyphs() as usize, initial);
         for (&c, &i) in inner.chars().iter() {
             (|| {
                 let mut geom = Geometry::new();
@@ -234,6 +251,10 @@ impl Font {
         }
     }
 
+    pub fn lookup_glyph_index(&self, ch: char) -> u16 {
+        self.inner.lookup_glyph_index(ch)
+    }
+
     fn internal_metrics(&self, px: f32, bb: &Rect) -> InternalMetrics {
         let sf = self.scale_factor(px);
         let radius = self.radius(px);
@@ -278,21 +299,5 @@ impl Font {
         metrics.width = width;
         metrics.height = height;
         metrics
-    }
-}
-
-//
-
-impl Deref for Font {
-    type Target = fontdue::Font;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for Font {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
     }
 }

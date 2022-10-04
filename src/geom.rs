@@ -1,4 +1,5 @@
 use crate::math::{bvec4_to_uvec4, BoundingBox, Line, Ray, Shape};
+use alloc::vec::Vec;
 use glam::{BVec4A, UVec4, Vec2, Vec4};
 use ttf_parser::OutlineBuilder;
 

@@ -1,11 +1,13 @@
 [package]
 name = "fontsdf"
-version = "0.4.7"
+version = "0.5.0"
 edition = "2021"
 description = "fontdue extension to generate sdf:s directly"
 license = "MIT"
 repository = "https://github.com/Overpeek/fontsdf"
 documentation = "https://docs.rs/fontsdf"
+keywords = ["font", "sdf", "truetype", "opentype", "ttf"]
+categories = ["no-std", "games"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
