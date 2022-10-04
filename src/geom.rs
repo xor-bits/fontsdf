@@ -1,5 +1,5 @@
-use crate::math::{Line, Shape};
-use glam::Vec2;
+use crate::math::{bvec4_to_uvec4, Line, Ray, Shape};
+use glam::{BVec4A, UVec4, Vec2, Vec4};
 use ttf_parser::OutlineBuilder;
 
 //
@@ -47,31 +47,30 @@ impl Geometry {
     //   this point   o====|=====o           |
     //   is inside         |                 |
     //   the character     +-----------------+
-    pub fn is_inside(&self, point: Vec2) -> bool {
-        let half_offs = Vec2::ONE * 0.5;
-        let tester = Shape::Line(Line {
-            from: half_offs + point.round(),
-            to: half_offs + Vec2::new(self.min_x - 100.0, point.y).round(),
-        });
-        self.shapes
-            .iter()
-            .filter(|shape| tester.collision(**shape))
-            .count()
-            % 2
-            == 1
-        /* self.shapes
-        .iter()
-        .copied()
-        .flat_map(|shape| shape.iter_lines())
-        .map(|Line { from, to }| Line {
-            from: from.round(),
-            to: to.round(),
-        })
-        .filter(|&Line { from, to }| Self::aabb_filter(from, to, tester_a, tester_b))
-        .filter(|&Line { from, to }| Self::line_line_intersection(from, to, tester_a, tester_b))
-        .count()
-        % 2
-        == 1 */
+    pub fn is_inside(&self, point: (Vec4, Vec4)) -> BVec4A {
+        let half = Vec4::ONE * 0.5;
+
+        let from = (half + point.0.round(), half + point.1.round());
+
+        let ray = Ray {
+            from_x: from.0,
+            from_y: from.1,
+            to_x: half + Vec4::splat(self.min_x - 100.0),
+            to_y: from.1,
+        };
+
+        let mut hit_counts = UVec4::ZERO;
+
+        for shape in self.shapes.iter() {
+            hit_counts += bvec4_to_uvec4(ray.collision(*shape));
+        }
+
+        BVec4A::new(
+            hit_counts.x % 2 == 1,
+            hit_counts.y % 2 == 1,
+            hit_counts.z % 2 == 1,
+            hit_counts.w % 2 == 1,
+        )
     }
 
     pub fn iter_lines(&self) -> impl Iterator<Item = Line> + '_ {

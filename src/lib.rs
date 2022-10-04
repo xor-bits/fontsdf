@@ -3,9 +3,8 @@
 
 use fontdue::FontSettings;
 use geom::Geometry;
-use glam::Vec2;
-use math::Line;
-use ordered_float::OrderedFloat;
+use glam::{UVec4, Vec4};
+use math::{bvec4_to_uvec4, Line};
 use std::ops::{Deref, DerefMut};
 use ttf_parser::{Face, Rect};
 
@@ -100,49 +99,68 @@ impl Font {
         let (geom, bb) = self.geometry_indexed(index);
 
         let metrics = self.internal_metrics(px, bb);
+        let inv_sf = 1.0 / metrics.sf;
 
-        let image = (0..metrics.height)
-            .rev()
-            .flat_map(|y| (0..metrics.width).map(move |x| (x + 1, y + 1)))
-            .map(|(x, y)| {
-                Vec2::new(
-                    x as f32 - metrics.radius as f32 + metrics.offset_x,
-                    y as f32 - metrics.radius as f32 + metrics.offset_y,
-                ) / metrics.sf
-            })
-            .map(|p| {
-                let is_inside = geom.is_inside(p);
+        // process in chunks of 4
+        let w = metrics.width as u32;
+        let h = metrics.height as u32;
+        let chunk_count = w * h / 4 + u32::from((w * h) % 4 != 0); // divide and round UP, (more if the last chunk doesn't cover everything)
+        let mut image = Vec::new();
+        image.resize((chunk_count * 4) as usize, 0); // maybe not zero init as they are not read before written to
+        for (idx, p) in (0..w * h / 4).map(|i| i * 4).map(|i| {
+            (
+                i as usize,
+                (
+                    (UVec4::new(i % w, (i + 1) % w, (i + 2) % w, (i + 3) % w).as_vec4()
+                        - metrics.radius as f32
+                        + metrics.offset_x)
+                        * inv_sf,
+                    (UVec4::new(
+                        h - 1 - i / w,
+                        h - 1 - (i + 1) / w,
+                        h - 1 - (i + 2) / w,
+                        h - 1 - (i + 3) / w,
+                    )
+                    .as_vec4()
+                        - metrics.radius as f32
+                        + metrics.offset_y)
+                        * inv_sf,
+                ),
+            )
+        }) {
+            let is_inside = geom.is_inside(p);
 
-                /* let shape_with_closest_point = geom
-                    .iter_shapes()
-                    .min_by_key(|s| OrderedFloat(s.bounding_box().max_distance_squared(p)))
-                    .unwrap(); // TODO:
+            // TODO:
+            // filter out bounding boxes where their
+            // nearest point is further than
+            // any other bounding box's furthest point
+            //
+            // so find bounding box with the nearest far
+            // point on it
+            //
+            // take that point
+            //
+            // then filter out bounding boxes that are
+            // further away than this point
 
-                let distance_squared = shape_with_closest_point
-                    .iter_lines()
-                    .map(|s| s.distance_ord(p))
-                    .map(OrderedFloat)
-                    .min()
-                    .unwrap_or(OrderedFloat(0.0))
-                    .0; */
+            let mut distances_squared = geom.iter_lines().map(|s| s.distance_ord(p));
+            let first = distances_squared.next().unwrap_or(Vec4::splat(0.0));
+            let distance_squared = distances_squared.fold(first, |min, next| min.min(next));
 
-                let distance_squared = geom
-                    .iter_lines()
-                    .map(|s| s.distance_ord(p))
-                    .map(OrderedFloat)
-                    .min()
-                    .unwrap_or(OrderedFloat(0.0))
-                    .0;
+            // invert pixels that are 'inside' the geometry
+            let mut d = Line::distance_finalize(distance_squared) * 0.5;
+            d *= UVec4::from(bvec4_to_uvec4(is_inside)).as_vec4() * 2.0 - 1.0;
 
-                let mut x = Line::distance_finalize(distance_squared) * 0.5;
+            // convert to pixels
+            let distances = (d + Vec4::splat(128.0)).as_uvec4();
+            image[idx + 0] = distances.x as u8;
+            image[idx + 1] = distances.y as u8;
+            image[idx + 2] = distances.z as u8;
+            image[idx + 3] = distances.w as u8;
+        }
 
-                if !is_inside {
-                    x *= -1.0;
-                }
-
-                (x + 128.0) as u8
-            })
-            .collect();
+        // cut out those extra pixels
+        image.truncate((w * h) as usize);
 
         (
             self.modify_metrics(index, px, metrics.radius, metrics.width, metrics.height),

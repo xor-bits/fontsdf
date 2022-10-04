@@ -1,4 +1,4 @@
-use glam::Vec2;
+use glam::{BVec4A, UVec4, Vec2, Vec4};
 
 //
 
@@ -32,12 +32,20 @@ pub struct BoundingBox {
     pub max: Vec2,
 }
 
+/// 4 rays packed to allow simd
+#[derive(Debug, Clone, Copy)]
+pub struct Ray {
+    pub from_x: Vec4,
+    pub from_y: Vec4,
+    pub to_x: Vec4,
+    pub to_y: Vec4,
+}
+
 //
 
 impl BoundingBox {
     pub fn aabb(self, other: Self) -> bool {
-        (self.min.x < other.max.x && self.max.x >= other.min.x)
-            && (self.min.y < other.max.y && self.max.y >= other.min.y)
+        self.min.cmplt(other.max).all() && self.max.cmpge(other.min).all()
     }
 
     /// returns the squared distance from the furthest point to this point
@@ -49,20 +57,40 @@ impl BoundingBox {
     }
 }
 
-impl Shape {
-    pub fn collision(self, other: Shape) -> bool {
-        if !self.bounding_box().aabb(other.bounding_box()) {
-            return false;
+impl Ray {
+    pub fn collision(self, other: Shape) -> BVec4A {
+        let bb_min_x = self.from_x.min(self.to_x);
+        let bb_min_y = self.from_y.min(self.to_y);
+        let bb_max_x = self.from_x.max(self.to_x);
+        let bb_max_y = self.from_y.max(self.to_y);
+
+        let bb_other = other.bounding_box();
+
+        // check for collisions for multiple bounding boxes per one bounding box
+        // if any of them collide, then continue
+        let collisions = (bb_min_x.cmple(Vec4::splat(bb_other.max.x)).bitmask()
+            & bb_max_x.cmpge(Vec4::splat(bb_other.min.x)).bitmask()
+            & bb_min_y.cmple(Vec4::splat(bb_other.max.y)).bitmask()
+            & bb_max_y.cmpge(Vec4::splat(bb_other.min.y)).bitmask())
+            != 0;
+        if !collisions {
+            return BVec4A::default(); // false
         }
 
-        // note: lines have only one line obviously
-        // so collision detection from line to
-        // shape is pretty fast
-        self.iter_lines()
-            .flat_map(|a| other.iter_lines().map(move |b| (a, b)))
-            .any(|(a, b)| a.line_line_intersection(b))
+        let mut result = BVec4A::default(); // false
+        for line in other.iter_lines() {
+            result |= line.line_ray_intersection(self);
+        }
+        result
     }
+}
 
+impl Shape {
+    // TODO:
+    // cache these
+    //
+    // this function takes too much time
+    // according to flamegraph
     pub fn bounding_box(self) -> BoundingBox {
         match self {
             Shape::Line(Line { from, to }) => BoundingBox {
@@ -169,42 +197,53 @@ impl Shape {
 }
 
 impl Line {
-    pub fn distance_ord(&self, p: Vec2) -> f32 {
-        let a = self.from;
-        let b = self.to;
-        let a_to_p = p - a;
-        let a_to_b = b - a;
+    // TODO:
+    // this is critical code
+    // this gets ran so many times
+    //
+    // also optimize this if possible
+    pub fn distance_ord(&self, p: (Vec4, Vec4)) -> Vec4 {
+        let a = (Vec4::splat(self.from.x), Vec4::splat(self.from.y));
+        let b = (Vec4::splat(self.to.x), Vec4::splat(self.to.y));
+        let a_to_p = (p.0 - a.0, p.1 - a.1);
+        let a_to_b = (b.0 - a.0, b.1 - a.1);
 
-        let t = (a_to_p.dot(a_to_b) / a_to_b.length_squared())
-            .min(1.0)
-            .max(0.0);
+        let t = ((a_to_p.0 * a_to_b.0 + a_to_p.1 * a_to_b.1)
+            / (a_to_b.0.powf(2.0) + a_to_b.1.powf(2.0)))
+        .min(Vec4::splat(1.0))
+        .max(Vec4::splat(0.0));
 
-        ((a + a_to_b * t) - p).length_squared()
+        ((a.0 + a_to_b.0 * t) - p.0).powf(2.0) + ((a.1 + a_to_b.1 * t) - p.1).powf(2.0)
     }
 
-    pub fn distance_finalize(d: f32) -> f32 {
-        d.sqrt()
+    pub fn distance_finalize(d: Vec4) -> Vec4 {
+        d.powf(0.5)
     }
+}
 
+impl Line {
     /// shamelessly stolen from: https://gamedev.stackexchange.com/a/26022
-    fn line_line_intersection(self, other: Self) -> bool {
-        let point_a1 = self.from;
-        let point_a2 = self.to;
-        let point_b1 = other.from;
-        let point_b2 = other.to;
+    fn line_ray_intersection(self, other: Ray) -> BVec4A {
+        let point_a1 = (Vec4::splat(self.from.x), Vec4::splat(self.from.y));
+        let point_a2 = (Vec4::splat(self.to.x), Vec4::splat(self.to.y));
+        let point_b1 = (other.from_x, other.from_y);
+        let point_b2 = (other.to_x, other.to_y);
 
-        let a1_a2 = point_a2 - point_a1;
-        let b1_b2 = point_b2 - point_b1;
-        let b1_a1 = point_a1 - point_b1;
+        let a1_a2 = (point_a2.0 - point_a1.0, point_a2.1 - point_a1.1);
+        let b1_b2 = (point_b2.0 - point_b1.0, point_b2.1 - point_b1.1);
+        let b1_a1 = (point_a1.0 - point_b1.0, point_a1.1 - point_b1.1);
 
-        let denominator = a1_a2.x * b1_b2.y - a1_a2.y * b1_b2.x;
-        let numerator1 = b1_a1.y * b1_b2.x - b1_a1.x * b1_b2.y;
-        let numerator2 = b1_a1.y * a1_a2.x - b1_a1.x * a1_a2.y;
+        let denominator = a1_a2.0 * b1_b2.1 - a1_a2.1 * b1_b2.0;
+        let numerator1 = b1_a1.1 * b1_b2.0 - b1_a1.0 * b1_b2.1;
+        let numerator2 = b1_a1.1 * a1_a2.0 - b1_a1.0 * a1_a2.1;
 
         let r = numerator1 / denominator;
         let s = numerator2 / denominator;
 
-        (0.0..=1.0).contains(&r) && (0.0..=1.0).contains(&s)
+        Vec4::splat(0.0).cmple(r)
+            & r.cmple(Vec4::splat(1.0))
+            & Vec4::splat(0.0).cmple(s)
+            & s.cmple(Vec4::splat(1.0))
     }
 }
 
@@ -212,4 +251,16 @@ impl From<Line> for Shape {
     fn from(val: Line) -> Self {
         Self::Line(val)
     }
+}
+
+//
+
+pub fn bvec4_to_uvec4(v: BVec4A) -> UVec4 {
+    let v = v.bitmask();
+    UVec4::new(
+        v & 0b1,
+        (v & 0b10) >> 1,
+        (v & 0b100) >> 2,
+        (v & 0b1000) >> 3,
+    )
 }

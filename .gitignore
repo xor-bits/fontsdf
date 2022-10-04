@@ -1,2 +1,4 @@
 /target
 /*.png
+/perf.data*
+/flamegraph.svg
