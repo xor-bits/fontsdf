@@ -9,11 +9,11 @@
 
 </div>
 
-This `no_std` library renders SDF:s **directly** and not by downscaling a higher resolution rasters.
-
 Signed Distance Field (SDF) textures can be used to render text
 or other vector art more flexibly[1], with higher quality while
 using less video memory (for the texture).
+
+This `no_std` library renders SDF:s **directly** and not by downscaling a higher resolution rasters.
 
 [1] For example:
 
