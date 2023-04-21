@@ -10,9 +10,11 @@ extern crate alloc;
 //
 
 use alloc::vec::Vec;
+use core::num::NonZeroU16;
 use fontdue::FontSettings;
 use geom::Geometry;
 use glam::{UVec4, Vec4};
+use hashbrown::HashMap;
 use math::{bvec4_to_uvec4, IterVec4MinMax, Line};
 use ttf_parser::{Face, Rect};
 
@@ -87,6 +89,10 @@ impl Font {
 
             inner,
         })
+    }
+
+    pub fn chars(&self) -> &HashMap<char, NonZeroU16> {
+        self.inner.chars()
     }
 
     pub fn scale_factor(&self, px: f32) -> f32 {
