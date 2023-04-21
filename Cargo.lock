@@ -298,7 +298,7 @@ dependencies = [
 
 [[package]]
 name = "fontsdf"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "criterion",
  "fontdue",
