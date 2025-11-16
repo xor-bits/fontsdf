@@ -9,7 +9,7 @@ extern crate alloc;
 
 //
 
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 use core::num::NonZeroU16;
 use fontdue::FontSettings;
 use geom::Geometry;
@@ -127,9 +127,8 @@ impl Font {
         // process in chunks of 4
         let w = metrics.width as u32;
         let h = metrics.height as u32;
-        let chunk_count = w * h / 4 + u32::from((w * h) % 4 != 0); // divide and round UP, (more if the last chunk doesn't cover everything)
-        let mut image = Vec::new();
-        image.resize((chunk_count * 4) as usize, 0); // maybe not zero init as they are not read before written to
+        let chunk_count = (w * h).div_ceil(4); // divide and round UP, (more if the last chunk doesn't cover everything)
+        let mut image = vec![0; (chunk_count * 4) as usize]; // maybe not zero init as they are not read before written to
         for (idx, p) in (0..w * h / 4).map(|i| i * 4).map(|i| {
             (
                 i as usize,
@@ -194,11 +193,11 @@ impl Font {
 
             // invert pixels that are 'inside' the geometry
             let mut d = Line::distance_finalize(distance_squared) * 0.5;
-            d *= UVec4::from(bvec4_to_uvec4(is_inside)).as_vec4() * 2.0 - 1.0;
+            d *= bvec4_to_uvec4(is_inside).as_vec4() * 2.0 - 1.0;
 
             // convert to pixels
             let distances = (d + Vec4::splat(128.0)).as_uvec4();
-            image[idx + 0] = distances.x as u8;
+            image[idx] = distances.x as u8;
             image[idx + 1] = distances.y as u8;
             image[idx + 2] = distances.z as u8;
             image[idx + 3] = distances.w as u8;
