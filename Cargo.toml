@@ -17,13 +17,13 @@ debug = true
 
 [dependencies]
 ttf-parser = "0.25"
-glam = "0.23"
-fontdue = "0.7"
-hashbrown = "0.13"
+glam = "0.30"
+fontdue = "0.9"
+hashbrown = "0.15"
 
 [dev-dependencies]
 image = "0.25"
-criterion = "0.4.0"
+criterion = "0.7"
 
 [[bench]]
 name = "main"
