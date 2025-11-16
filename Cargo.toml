@@ -16,14 +16,13 @@ lto = true
 debug = true
 
 [dependencies]
-ttf-parser = "0.19"
-ordered-float = "3.6"
+ttf-parser = "0.25"
 glam = "0.23"
 fontdue = "0.7"
 hashbrown = "0.13"
 
 [dev-dependencies]
-image = "0.24"
+image = "0.25"
 criterion = "0.4.0"
 
 [[bench]]
