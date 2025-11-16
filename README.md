@@ -81,7 +81,7 @@ image::GrayImage::from_raw(metrics.width as _, metrics.height as _, sdf)
 
 - 128x128
 - 48px (+radius) font size (32px input size should be enough for any output size)
-- 'free' shadow
+- 'free' shadows, borders, antialias, glow, etc.
 
 <div style="display: flex; align-items: center;">
 	<img src="/.github/sdf_glyphs.png"/>
