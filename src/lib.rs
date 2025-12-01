@@ -15,17 +15,21 @@ use fontdue::FontSettings;
 use geom::Geometry;
 use glam::{UVec4, Vec4};
 use hashbrown::HashMap;
-use math::{bvec4_to_uvec4, IterVec4MinMax, Line};
+use math::Line;
 use ttf_parser::{Face, Rect};
 
 //
 
 pub use fontdue::{Metrics, OutlineBounds};
 
+use self::math::bvec4_to_uvec4;
+
 //
 
 pub mod geom;
 pub mod math;
+
+pub const CURVE_RESOLUTION: usize = 8;
 
 //
 
@@ -150,50 +154,25 @@ impl Font {
                 ),
             )
         }) {
-            // normal rendering (non SDF) cares mostly
-            // about this one only
-            //
-            // but with SDF:s, the distances are also
-            // needed
             let is_inside = geom.is_inside(p);
 
-            /* this one was NOT faster:
-            // filter out bounding boxes where their
-            // nearest point is further than
-            // any other bounding box's furthest point
-
-            // so find bounding box with the nearest far
-            // point on it
-            let nearest_far_point = geom
-                .iter_shapes()
-                .map(|s| s.bounding_box().max_distance_squared(p))
-                .min_vec_or(Vec4::ZERO);
-
-            // take that point
-
-            let distance_squared = geom
-                .iter_shapes()
-                // then filter out bounding boxes that are
-                // further away than this point
-                .filter(|s| {
-                    s.bounding_box()
-                        .min_distance_squared(p)
-                        .cmplt(nearest_far_point)
-                        .any()
-                })
-                // now find the closest real point
-                .flat_map(|s| s.iter_lines())
-                .map(|s| s.distance_ord(p))
-                .min_vec_or(Vec4::splat(0.0)); */
+            // if false {
+            //     image[idx] = is_inside.test(0) as u8 * 255;
+            //     image[idx + 1] = is_inside.test(1) as u8 * 255;
+            //     image[idx + 2] = is_inside.test(2) as u8 * 255;
+            //     image[idx + 3] = is_inside.test(3) as u8 * 255;
+            //     continue;
+            // }
 
             let distance_squared = geom
                 .iter_lines()
                 .map(|s| s.distance_ord(p))
-                .min_vec_or(Vec4::splat(0.0));
+                .reduce(|acc, next| acc.min(next))
+                .unwrap_or(Vec4::ONE);
 
             // invert pixels that are 'inside' the geometry
-            let mut d = Line::distance_finalize(distance_squared) * 0.5;
-            d *= bvec4_to_uvec4(is_inside).as_vec4() * 2.0 - 1.0;
+            let sign = bvec4_to_uvec4(is_inside).as_vec4() * 2.0 - 1.0;
+            let d = Line::distance_finalize(distance_squared) * 0.5 * sign;
 
             // convert to pixels
             let distances = (d + Vec4::splat(128.0)).as_uvec4();

@@ -1,32 +1,8 @@
 use glam::{BVec4A, UVec4, Vec2, Vec4};
 
+use crate::geom::Contour;
+
 //
-
-#[derive(Debug, Clone, Copy)]
-pub enum Shape {
-    Line {
-        line: Line,
-
-        bb: BoundingBox,
-    },
-
-    Quad {
-        from: Vec2,
-        by: Vec2,
-        to: Vec2,
-
-        bb: BoundingBox,
-    },
-
-    Curve {
-        from: Vec2,
-        by_a: Vec2,
-        by_b: Vec2,
-        to: Vec2,
-
-        bb: BoundingBox,
-    },
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Line {
@@ -35,6 +11,21 @@ pub struct Line {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct Quad {
+    pub from: Vec2,
+    pub by: Vec2,
+    pub to: Vec2,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Curve {
+    pub from: Vec2,
+    pub by_a: Vec2,
+    pub by_b: Vec2,
+    pub to: Vec2,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
 pub struct BoundingBox {
     pub min: Vec2,
     pub max: Vec2,
@@ -49,11 +40,24 @@ pub struct Ray {
     pub to_y: Vec4,
 }
 
+pub trait Segment: Sized {
+    fn aabb(self) -> BoundingBox;
+    fn iter_lines(self, resolution: usize) -> impl ExactSizeIterator<Item = Line>;
+    fn control_points(self) -> impl ExactSizeIterator<Item = Vec2>;
+}
+
 //
 
 impl BoundingBox {
     pub fn aabb(self, other: Self) -> bool {
         self.min.cmplt(other.max).all() && self.max.cmpge(other.min).all()
+    }
+
+    pub fn union(self, other: Self) -> Self {
+        Self {
+            min: self.min.min(other.min),
+            max: self.max.max(other.max),
+        }
     }
 
     /// squared distance from a point to the
@@ -103,13 +107,13 @@ impl BoundingBox {
 }
 
 impl Ray {
-    pub fn collision(self, other: Shape) -> BVec4A {
+    pub fn hit_count(self, other: &Contour) -> Vec4 {
         let bb_min_x = self.from_x.min(self.to_x);
         let bb_min_y = self.from_y.min(self.to_y);
         let bb_max_x = self.from_x.max(self.to_x);
         let bb_max_y = self.from_y.max(self.to_y);
 
-        let bb_other = other.bounding_box();
+        let bb_other = other.aabb;
 
         // check for collisions for multiple bounding boxes per one bounding box
         // if any of them collide, then continue
@@ -119,107 +123,102 @@ impl Ray {
             & bb_max_y.cmpge(Vec4::splat(bb_other.min.y)).bitmask())
             != 0;
         if !collisions {
-            return BVec4A::default(); // false
+            return Vec4::ZERO;
         }
 
-        let mut result = BVec4A::default(); // false
-        for line in other.iter_lines() {
-            result |= line.line_ray_intersection(self);
+        let mut result = Vec4::ZERO;
+        for line in other.lines.iter() {
+            let side = line.side((self.from_x, self.from_y)).signum();
+            let intersects = bvec4_to_uvec4(line.line_ray_intersection(self)).as_vec4();
+            result -= side * intersects;
         }
         result
     }
 }
 
-impl Shape {
-    pub fn bounding_box(self) -> BoundingBox {
-        match self {
-            Shape::Line { bb, .. } => bb,
-            Shape::Quad { bb, .. } => bb,
-            Shape::Curve { bb, .. } => bb,
+impl Segment for Line {
+    fn aabb(self) -> BoundingBox {
+        BoundingBox {
+            min: self.from.min(self.to),
+            max: self.from.max(self.to),
         }
     }
 
-    pub fn iter_lines(self) -> impl Iterator<Item = Line> {
-        enum ShapeIter<I0, I1, I2>
-        where
-            I0: Iterator<Item = Line>,
-            I1: Iterator<Item = Line>,
-            I2: Iterator<Item = Line>,
-        {
-            I0(I0),
-            I1(I1),
-            I2(I2),
+    fn iter_lines(self, _: usize) -> impl ExactSizeIterator<Item = Line> {
+        core::iter::once(self)
+    }
+
+    fn control_points(self) -> impl ExactSizeIterator<Item = Vec2> {
+        [self.from, self.to].into_iter()
+    }
+}
+
+impl Segment for Quad {
+    fn aabb(self) -> BoundingBox {
+        BoundingBox {
+            min: self.from.min(self.by).min(self.to),
+            max: self.from.max(self.by).max(self.to),
         }
+    }
 
-        impl<I0, I1, I2> Iterator for ShapeIter<I0, I1, I2>
-        where
-            I0: Iterator<Item = Line>,
-            I1: Iterator<Item = Line>,
-            I2: Iterator<Item = Line>,
-        {
-            type Item = Line;
+    fn iter_lines(self, resolution: usize) -> impl ExactSizeIterator<Item = Line> {
+        let step = 1.0 / resolution as f32;
+        let mut prev = self.from;
+        let mut t = step;
 
-            fn next(&mut self) -> Option<Self::Item> {
-                match self {
-                    ShapeIter::I0(i0) => i0.next(),
-                    ShapeIter::I1(i1) => i1.next(),
-                    ShapeIter::I2(i2) => i2.next(),
-                }
-            }
+        core::iter::repeat_n((), resolution).map(move |_| {
+            let from_by = self.from.lerp(self.by, t);
+            let by_to = self.by.lerp(self.to, t);
+            let next = from_by.lerp(by_to, t);
+            let result = Line {
+                from: prev.round(),
+                to: next.round(),
+            };
+            prev = next;
+            t += step;
+            result
+        })
+    }
+
+    fn control_points(self) -> impl ExactSizeIterator<Item = Vec2> {
+        [self.from, self.by, self.to].into_iter()
+    }
+}
+
+impl Segment for Curve {
+    fn aabb(self) -> BoundingBox {
+        BoundingBox {
+            min: self.from.min(self.by_a).min(self.by_b).min(self.to),
+            max: self.from.max(self.by_a).max(self.by_b).max(self.to),
         }
+    }
 
-        const RES: usize = 8;
-        const STEP: f32 = 1.0 / RES as f32;
+    fn iter_lines(self, resolution: usize) -> impl ExactSizeIterator<Item = Line> {
+        let step = 1.0 / resolution as f32;
+        let mut prev = self.from;
+        let mut t = step;
 
-        match self {
-            // just a line
-            Shape::Line { line, .. } => ShapeIter::I0(Some(line).into_iter()),
+        core::iter::repeat_n((), resolution).map(move |_| {
+            let from_by_a = self.from.lerp(self.by_a, t);
+            let by_a_by_b = self.by_a.lerp(self.by_b, t);
+            let by_b_to = self.by_b.lerp(self.to, t);
 
-            // bézier curve with 1 control point
-            Shape::Quad { from, by, to, .. } => {
-                let mut prev = from;
+            let from_by_a_by_a_by_b = from_by_a.lerp(by_a_by_b, t);
+            let by_a_by_b_by_b_to = by_a_by_b.lerp(by_b_to, t);
 
-                ShapeIter::I1((1..=RES).map(|i| i as f32 * STEP).map(move |t| {
-                    let from_by = from.lerp(by, t);
-                    let by_to = by.lerp(to, t);
-                    let next = from_by.lerp(by_to, t);
-                    let result = Line {
-                        from: prev,
-                        to: next,
-                    };
-                    prev = next;
-                    result
-                }))
-            }
+            let next = from_by_a_by_a_by_b.lerp(by_a_by_b_by_b_to, t);
+            let result = Line {
+                from: prev.round(),
+                to: next.round(),
+            };
+            prev = next;
+            t += step;
+            result
+        })
+    }
 
-            // bézier curve with 2 control points
-            Shape::Curve {
-                from,
-                by_a,
-                by_b,
-                to,
-                ..
-            } => {
-                let mut prev = from;
-
-                ShapeIter::I2((1..=RES).map(|i| i as f32 * STEP).map(move |t| {
-                    let from_by_a = from.lerp(by_a, t);
-                    let by_a_by_b = by_a.lerp(by_b, t);
-                    let by_b_to = by_b.lerp(to, t);
-
-                    let from_by_a_by_a_by_b = from_by_a.lerp(by_a_by_b, t);
-                    let by_a_by_b_by_b_to = by_a_by_b.lerp(by_b_to, t);
-
-                    let next = from_by_a_by_a_by_b.lerp(by_a_by_b_by_b_to, t);
-                    let result = Line {
-                        from: prev,
-                        to: next,
-                    };
-                    prev = next;
-                    result
-                }))
-            }
-        }
+    fn control_points(self) -> impl ExactSizeIterator<Item = Vec2> {
+        [self.from, self.by_a, self.by_b, self.to].into_iter()
     }
 }
 
@@ -229,7 +228,7 @@ impl Line {
     // this gets ran so many times
     //
     // also optimize this if possible
-    pub fn distance_ord(&self, p: (Vec4, Vec4)) -> Vec4 {
+    pub fn distance_ord(self, p: (Vec4, Vec4)) -> Vec4 {
         let a = (Vec4::splat(self.from.x), Vec4::splat(self.from.y));
         let b = (Vec4::splat(self.to.x), Vec4::splat(self.to.y));
         let a_to_p = (p.0 - a.0, p.1 - a.1);
@@ -244,12 +243,16 @@ impl Line {
         tmp.0 * tmp.0 + tmp.1 * tmp.1
     }
 
+    pub fn side(self, p: (Vec4, Vec4)) -> Vec4 {
+        let a = (Vec4::splat(self.from.x), Vec4::splat(self.from.y));
+        let b = (Vec4::splat(self.to.x), Vec4::splat(self.to.y));
+        ((b.0 - a.0) * (p.1 - a.1) - (p.0 - a.0) * (b.1 - a.1)).signum()
+    }
+
     pub fn distance_finalize(d: Vec4) -> Vec4 {
         d.powf(0.5)
     }
-}
 
-impl Line {
     /// shamelessly stolen from: https://gamedev.stackexchange.com/a/26022
     fn line_ray_intersection(self, other: Ray) -> BVec4A {
         let point_a1 = (Vec4::splat(self.from.x), Vec4::splat(self.from.y));
@@ -275,18 +278,6 @@ impl Line {
     }
 }
 
-impl From<Line> for Shape {
-    fn from(line: Line) -> Self {
-        Self::Line {
-            line,
-            bb: BoundingBox {
-                min: line.from.min(line.to),
-                max: line.from.max(line.to),
-            },
-        }
-    }
-}
-
 //
 
 pub fn bvec4_to_uvec4(v: BVec4A) -> UVec4 {
@@ -299,44 +290,12 @@ pub fn bvec4_to_uvec4(v: BVec4A) -> UVec4 {
     )
 }
 
-//
-
-pub trait IterVec4MinMax {
-    /// per component min
-    fn min_vec(self) -> Option<Vec4>;
-
-    // these _or ones DID make a difference
-    // they drop out one branch
-    /// per component min
-    fn min_vec_or(self, or: Vec4) -> Vec4;
-
-    /// per component max
-    fn max_vec(self) -> Option<Vec4>;
-
-    /// per component max
-    fn max_vec_or(self, or: Vec4) -> Vec4;
-}
-
-//
-
-impl<T: Iterator<Item = Vec4>> IterVec4MinMax for T {
-    fn min_vec(mut self) -> Option<Vec4> {
-        let first = self.next()?;
-        Some(self.fold(first, |min, v| min.min(v)))
-    }
-
-    fn min_vec_or(mut self, or: Vec4) -> Vec4 {
-        let first = self.next().unwrap_or(or);
-        self.fold(first, |min, v| min.min(v))
-    }
-
-    fn max_vec(mut self) -> Option<Vec4> {
-        let first = self.next()?;
-        Some(self.fold(first, |max, v| max.max(v)))
-    }
-
-    fn max_vec_or(mut self, or: Vec4) -> Vec4 {
-        let first = self.next().unwrap_or(or);
-        self.fold(first, |max, v| max.max(v))
-    }
+pub fn uvec4_to_bvec4(v: UVec4) -> BVec4A {
+    BVec4A::new(
+        v.x != 0,
+        v.y != 0,
+        v.z != 0,
+        v.w != 0,
+        //
+    )
 }
